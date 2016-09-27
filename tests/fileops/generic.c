@@ -83,7 +83,8 @@ TEST(merge_directories)
 
 		cmd_group_begin("undo msg");
 
-		assert_non_null(ops = ops_alloc(OP_MOVEF, 0, "merge", ".", "."));
+		assert_non_null(ops = ops_alloc(OP_MOVEF, ORM_FOREGROUND, "merge", ".",
+					"."));
 		ops->crp = CRP_OVERWRITE_ALL;
 		assert_success(merge_dirs("first", "second", ops));
 		ops_free(ops);
@@ -159,7 +160,7 @@ TEST(error_lists_are_joined_with_newline_separator)
 
 	cfg.use_system_calls = 1;
 
-	assert_non_null(ops = ops_alloc(OP_MKDIR, 0, "test", ".", "."));
+	assert_non_null(ops = ops_alloc(OP_MKDIR, ORM_FOREGROUND, "test", ".", "."));
 
 	assert_failure(perform_operation(OP_MKDIR, ops, NULL, ".", NULL));
 	assert_failure(perform_operation(OP_MKDIR, ops, NULL, ".", NULL));
@@ -210,7 +211,7 @@ perform_merge(int op)
 
 	cmd_group_begin("undo msg");
 
-	assert_non_null(ops = ops_alloc(op, 0, "merge", ".", "."));
+	assert_non_null(ops = ops_alloc(op, ORM_FOREGROUND, "merge", ".", "."));
 	ops->crp = CRP_OVERWRITE_ALL;
 	if(op == OP_MOVEF)
 	{

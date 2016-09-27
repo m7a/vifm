@@ -169,10 +169,15 @@ ARRAY_GUARD(op_funcs, OP_COUNT);
 static ops_t *curr_ops;
 
 ops_t *
-ops_alloc(OPS main_op, int bg, const char descr[], const char base_dir[],
-		const char target_dir[])
+ops_alloc(OPS main_op, OpRunningMode run_mode, const char descr[],
+		const char base_dir[], const char target_dir[])
 {
 	ops_t *const ops = calloc(1, sizeof(*ops));
+	if(ops == NULL)
+	{
+		return NULL;
+	}
+
 	ops->main_op = main_op;
 	ops->descr = descr;
 	update_string(&ops->slow_fs_list, cfg.slow_fs_list);
@@ -181,7 +186,8 @@ ops_alloc(OPS main_op, int bg, const char descr[], const char base_dir[],
 	ops->fast_file_cloning = cfg.fast_file_cloning;
 	ops->base_dir = strdup(base_dir);
 	ops->target_dir = strdup(target_dir);
-	ops->bg = bg;
+	ops->run_mode = run_mode;
+
 	return ops;
 }
 
@@ -287,7 +293,7 @@ static int
 op_remove(ops_t *ops, void *data, const char *src, const char *dst)
 {
 	if(cfg_confirm_delete(0) && !curr_stats.confirmed &&
-			(ops == NULL || !ops->bg))
+			(ops == NULL || ops->run_mode != ORM_BACKGROUND))
 	{
 		curr_stats.confirmed = prompt_msg("Permanent deletion",
 				"Are you sure?  If you're undoing a command and want to see file "
@@ -936,12 +942,13 @@ exec_io_op(ops_t *ops, int (*func)(io_args_t *const), io_args_t *const args,
 		int cancellable)
 {
 	int result;
+	const int background = (ops != NULL && ops->run_mode == ORM_BACKGROUND);
 
 	args->estim = (ops == NULL) ? NULL : ops->estim;
 
 	if(ops != NULL)
 	{
-		if(!ops->bg)
+		if(!background)
 		{
 			args->confirm = &confirm_overwrite;
 			args->result.errors_cb = &dispatch_error;
@@ -952,7 +959,7 @@ exec_io_op(ops_t *ops, int (*func)(io_args_t *const), io_args_t *const args,
 
 	if(cancellable)
 	{
-		if(ops != NULL && ops->bg)
+		if(background)
 		{
 			args->cancellation.arg = ops->bg_op;
 			args->cancellation.hook = &bg_cancellation_hook;
@@ -970,7 +977,7 @@ exec_io_op(ops_t *ops, int (*func)(io_args_t *const), io_args_t *const args,
 	result = func(args);
 	curr_ops = NULL;
 
-	if(cancellable && (ops == NULL || !ops->bg))
+	if(cancellable && !background)
 	{
 		ui_cancellation_disable();
 	}
@@ -1150,7 +1157,7 @@ run_operation_command(ops_t *ops, char cmd[], int cancellable)
 		return bg_and_wait_for_errors(cmd, &no_cancellation);
 	}
 
-	if(ops != NULL && ops->bg)
+	if(ops != NULL && ops->run_mode == ORM_BACKGROUND)
 	{
 		const cancellation_t bg_cancellation_info = {
 			.arg = ops->bg_op,
