@@ -530,13 +530,13 @@ iop_cp(io_args_t *const args)
 
 	/* TODO: use sendfile() if platform supports it. */
 
-	while(!cloned && (nread = fread(&block, 1, sizeof(block), in)) != 0U)
+	while(!cloned && (nread = fread(&block, 1, sizeof(block), in)) == BLOCK_SIZE)
 	{
-		if(io_cancelled(args))
-		{
-			error = 1;
-			break;
-		}
+		/* if(io_cancelled(args)) */
+		/* { */
+		/* 	error = 1; */
+		/* 	break; */
+		/* } */
 
 		if(fwrite(&block, 1, nread, out) != nread)
 		{

@@ -146,11 +146,11 @@ io_progress_changed(const io_progress_t *const state)
 
 		if(!pdata->dialog)
 		{
-			if(ui_char_pressed(IO_DETAILS_KEY))
-			{
-				pdata->dialog = 1;
-				ui_sb_clear();
-			}
+			/* if(ui_char_pressed(IO_DETAILS_KEY)) */    
+			/* { */
+			/* 	pdata->dialog = 1; */
+			/* 	ui_sb_clear(); */
+			/* } */
 		}
 	}
 
@@ -241,9 +241,12 @@ io_progress_fg(const io_progress_t *const state, int progress)
 	progress_data_t *const pdata = estim->param;
 	ops_t *const ops = pdata->ops;
 
+	ops_lock_ui(ops);
+
 	if(!pdata->dialog)
 	{
 		io_progress_fg_sb(state, progress);
+		ops_unlock_ui(ops);
 		return;
 	}
 
@@ -266,6 +269,7 @@ io_progress_fg(const io_progress_t *const state, int progress)
 				ops->target_dir, (unsigned long long)estim->total_items, total_size_str,
 				pretty_path);
 		pdata->width = getmaxx(error_win);
+		ops_unlock_ui(ops);
 		return;
 	}
 
@@ -317,6 +321,7 @@ io_progress_fg(const io_progress_t *const state, int progress)
 	pdata->width = getmaxx(error_win);
 
 	free(as_part);
+	ops_unlock_ui(ops);
 }
 
 /* Takes care of progress for foreground operations displayed on status line. */

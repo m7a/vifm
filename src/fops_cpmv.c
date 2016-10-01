@@ -21,9 +21,13 @@
 
 #include <assert.h> /* assert() */
 #include <string.h> /* strcmp() strdup() */
+#include <unistd.h>
+
+#include <signal.h>
 
 #include "compat/reallocarray.h"
 #include "modes/dialogs/msg_dialog.h"
+#include "modes/wk.h"
 #include "ui/cancellation.h"
 #include "ui/fileview.h"
 #include "ui/statusbar.h"
@@ -46,7 +50,9 @@ typedef struct
 	char **list;
 	int nlines;
 	CopyMoveLikeOp op;
-	int force;
+	const char *undo_msg;
+	const char *path;
+	ops_t *ops;
 	int result;
 }
 cpmv_detach;
@@ -73,15 +79,63 @@ int
 fops_cpmv(FileView *view, char *list[], int nlines, CopyMoveLikeOp op,
 		int force)
 {
+	char undo_msg[COMMAND_GROUP_INFO_LEN + 1];
+	char path[PATH_MAX];
 	cpmv_detach args = {
 		.view = view,
 		.list = list,
 		.nlines = nlines,
 		.op = op,
-		.force = force,
+		.undo_msg = undo_msg,
+		.path = path,
 	};
+	int err;
+	int from_file;
+	ops_t *ops;
 	pthread_t id;
 	void *param;
+
+	if((op == CMLO_LINK_REL || op == CMLO_LINK_ABS) && !symlinks_available())
+	{
+		show_error_msg("Symbolic Links Error",
+				"Your OS doesn't support symbolic links");
+		return 0;
+	}
+
+	err = cpmv_prepare(view, &list, &nlines, op, force, undo_msg,
+			sizeof(undo_msg), path, sizeof(path), &from_file);
+	if(err != 0)
+	{
+		return err > 0;
+	}
+
+	if(pane_in_dir(curr_view, path) && force)
+	{
+		show_error_msg("Operation Error",
+				"Forcing overwrite when destination and source is same directory will "
+				"lead to losing data");
+		return 0;
+	}
+
+	switch(op)
+	{
+		case CMLO_COPY:
+			ops = fops_get_ops(OP_COPY, "Copying", flist_get_dir(view), path, 1);
+			break;
+		case CMLO_MOVE:
+			ops = fops_get_ops(OP_MOVE, "Moving", flist_get_dir(view), path, 1);
+			break;
+		case CMLO_LINK_REL:
+		case CMLO_LINK_ABS:
+			ops = fops_get_ops(OP_SYMLINK, "Linking", flist_get_dir(view), path, 1);
+			break;
+
+		default:
+			assert(0 && "Unexpected operation type.");
+			return 0;
+	}
+
+	args.ops = ops;
 
 	if(bg_execute("", "...", 0, 0, &cpmv_detached_bg, &args, &id) != 0)    
 	{
@@ -102,9 +156,36 @@ fops_cpmv(FileView *view, char *list[], int nlines, CopyMoveLikeOp op,
 	//pthread_kill(id, SIGINT);
 	/* ops_unlock_ui(ops); */
 
+	while(pthread_kill(id, 0) == 0)
+	{
+		ops_lock_ui(ops);
+		const int pressed = ui_char_pressed(NC_C_c);
+		ops_unlock_ui(ops);
+		if(pressed)
+		{
+			break;
+		}
+		usleep(20);
+	}
+	pthread_kill(id, SIGINT);
 
 	pthread_join(id, &param);         
-	return (int)(size_t)param;
+
+	if(from_file)
+	{
+		free_string_array(list, nlines);
+	}
+
+	if((int)(size_t)param == 0)
+	{
+		return 0;
+	}
+
+	status_bar_messagef("%d file%s successfully processed%s", ops->succeeded,
+			(ops->succeeded == 1) ? "" : "s", fops_get_cancellation_suffix());
+
+	fops_free_ops(ops);
+	return 1;
 }
 
         
@@ -117,68 +198,16 @@ cpmv_detached_bg(bg_op_t *bg_op, void *arg)
 	char **list = args->list;
 	int nlines = args->nlines;
 	CopyMoveLikeOp op = args->op;
-	int force = args->force;
+	ops_t *const ops = args->ops;
+	const char *path = args->path;
 
-	int err;
-	int nmarked_files;
-	int custom_fnames;
-	int i;
-	char undo_msg[COMMAND_GROUP_INFO_LEN + 1];
-	dir_entry_t *entry;
-	char path[PATH_MAX];
-	int from_file;
-	ops_t *ops;
+	int custom_fnames = (nlines > 0);
+	int i = 0;
+	dir_entry_t *entry = NULL;
 
-	if((op == CMLO_LINK_REL || op == CMLO_LINK_ABS) && !symlinks_available())
-	{
-		show_error_msg("Symbolic Links Error",
-				"Your OS doesn't support symbolic links");
-		args->result = 0;
-		return;
-	}
+	const int nmarked_files = fops_enqueue_marked_files(ops, view, path, 0);
 
-	err = cpmv_prepare(view, &list, &nlines, op, force, undo_msg,
-			sizeof(undo_msg), path, sizeof(path), &from_file);
-	if(err != 0)
-	{
-		args->result = err > 0;
-		return;
-	}
-
-	if(pane_in_dir(view, path) && force)
-	{
-		show_error_msg("Operation Error",
-				"Forcing overwrite when destination and source is same directory will "
-				"lead to losing data");
-		args->result = 0;
-		return;
-	}
-
-	switch(op)
-	{
-		case CMLO_COPY:
-			ops = fops_get_ops(OP_COPY, "Copying", flist_get_dir(view), path, 1);
-			break;
-		case CMLO_MOVE:
-			ops = fops_get_ops(OP_MOVE, "Moving", flist_get_dir(view), path, 1);
-			break;
-		case CMLO_LINK_REL:
-		case CMLO_LINK_ABS:
-			ops = fops_get_ops(OP_SYMLINK, "Linking", flist_get_dir(view), path, 1);
-			break;
-
-		default:
-			assert(0 && "Unexpected operation type.");
-			args->result = 0;
-			return;
-	}
-
-	nmarked_files = fops_enqueue_marked_files(ops, view, path, 0);
-
-	cmd_group_begin(undo_msg);
-	i = 0;
-	entry = NULL;
-	custom_fnames = (nlines > 0);
+	cmd_group_begin(args->undo_msg);
 	while(iter_marked_entries(view, &entry) && !ui_cancellation_requested())
 	{
 		/* Must be at this level as dst might point into this buffer. */
@@ -234,15 +263,6 @@ cpmv_detached_bg(bg_op_t *bg_op, void *arg)
 	cmd_group_end();
 
 	ui_views_reload_filelists();
-	if(from_file)
-	{
-		free_string_array(list, nlines);
-	}
-
-	status_bar_messagef("%d file%s successfully processed%s", ops->succeeded,
-			(ops->succeeded == 1) ? "" : "s", fops_get_cancellation_suffix());
-
-	fops_free_ops(ops);
 
 	args->result = 1;
 	return;

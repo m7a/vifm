@@ -1154,6 +1154,8 @@ prompt_user(const io_args_t *args, const char title[], const char msg[],
 {
 	char response;
 
+	ops_lock_ui(curr_ops);
+
 	/* Active cancellation conflicts with input processing by putting terminal in
 	 * a cooked mode. */
 	if(args->cancellation.hook != NULL)
@@ -1165,6 +1167,8 @@ prompt_user(const io_args_t *args, const char title[], const char msg[],
 	{
 		noraw();
 	}
+
+	ops_unlock_ui(curr_ops);
 
 	return response;
 }
