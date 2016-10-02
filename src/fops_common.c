@@ -142,6 +142,7 @@ io_progress_changed(const io_progress_t *const state)
 	/* Don't query for scheduled redraw or input for background operations. */
 	if(!pdata->bg)
 	{
+		// need to hold lock here      
 		redraw = fetch_redraw_scheduled();
 
 		if(!pdata->dialog)
@@ -171,6 +172,7 @@ io_progress_changed(const io_progress_t *const state)
 
 	if(redraw)
 	{
+		// need to hold lock here      
 		modes_redraw();
 	}
 

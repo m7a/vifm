@@ -27,6 +27,7 @@
 
 #include "compat/reallocarray.h"
 #include "modes/dialogs/msg_dialog.h"
+#include "modes/modes.h"
 #include "modes/wk.h"
 #include "ui/cancellation.h"
 #include "ui/fileview.h"
@@ -160,6 +161,10 @@ fops_cpmv(FileView *view, char *list[], int nlines, CopyMoveLikeOp op,
 	{
 		ops_lock_ui(ops);
 		const int pressed = ui_char_pressed(NC_C_c);
+		if(fetch_redraw_scheduled())
+		{
+			modes_redraw();
+		}
 		ops_unlock_ui(ops);
 		if(pressed)
 		{
