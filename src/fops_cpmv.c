@@ -296,7 +296,7 @@ fops_replace(FileView *view, const char dst[], int force)
 		return;
 	}
 
-	ops = fops_get_ops(OP_COPY, "Copying", flist_get_dir(view), dst_dir);
+	ops = fops_get_ops(OP_COPY, "Copying", flist_get_dir(view), dst_dir, 0);
 
 	snprintf(undo_msg, sizeof(undo_msg), "Copying %s to %s",
 			replace_home_part(src_full), dst_dir);
