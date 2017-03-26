@@ -211,6 +211,7 @@ setup_signals(void)
 void
 sigint_a(void)
 {
+	return;
 	struct sigaction handle_signal_action;
 
 	handle_signal_action.sa_handler = &handle_signal;
@@ -223,6 +224,7 @@ sigint_a(void)
 void
 sigint_b(void)
 {
+	return;
 	struct sigaction handle_signal_action;
 
 	handle_signal_action.sa_handler = &handle_signal;

@@ -535,11 +535,11 @@ iop_cp(io_args_t *const args)
 	while(!cloned && (nread = fread(&block, 1, sizeof(block), in)) != 0U)
 	{
 		sigint_b();
-		/* if(io_cancelled(args)) */
-		/* { */
-		/* 	error = 1; */
-		/* 	break; */
-		/* } */
+		if(io_cancelled(args))
+		{
+			error = 1;
+			break;
+		}
 
 		if(fwrite(&block, 1, nread, out) != nread)
 		{

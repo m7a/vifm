@@ -129,6 +129,7 @@ io_progress_changed(const io_progress_t *const state)
 {
 	const ioeta_estim_t *const estim = state->estim;
 	progress_data_t *const pdata = estim->param;
+	ops_t *const ops = pdata->ops;
 
 	int redraw = 0;
 	int progress, skip;
@@ -142,17 +143,20 @@ io_progress_changed(const io_progress_t *const state)
 	/* Don't query for scheduled redraw or input for background operations. */
 	if(!pdata->bg)
 	{
-		// need to hold lock here      
+		ops_lock_ui(ops);
+
 		redraw = fetch_redraw_scheduled();
 
 		if(!pdata->dialog)
 		{
-			/* if(ui_char_pressed(IO_DETAILS_KEY)) */    
-			/* { */
-			/* 	pdata->dialog = 1; */
-			/* 	ui_sb_clear(); */
-			/* } */
+			if(ui_char_pressed(IO_DETAILS_KEY))    
+			{
+				pdata->dialog = 1;
+				ui_sb_clear();
+			}
 		}
+
+		ops_unlock_ui(ops);
 	}
 
 	/* Do nothing if progress change is small, but force update on stage
@@ -172,8 +176,9 @@ io_progress_changed(const io_progress_t *const state)
 
 	if(redraw)
 	{
-		// need to hold lock here      
+		ops_lock_ui(ops);
 		modes_redraw();
+		ops_unlock_ui(ops);
 	}
 
 	if(pdata->bg)
@@ -618,11 +623,21 @@ fops_enqueue_marked_files(ops_t *ops, FileView *view, const char dst_hint[],
 	int nmarked_files = 0;
 	dir_entry_t *entry = NULL;
 
+	ops_lock_ui(ops);
 	ui_cancellation_enable();
+	ops_unlock_ui(ops);
 
-	while(iter_marked_entries(view, &entry) && !ui_cancellation_requested())
+	while(iter_marked_entries(view, &entry))
 	{
 		char full_path[PATH_MAX];
+
+		ops_lock_ui(ops);
+		if(ui_cancellation_requested())
+		{
+			ops_unlock_ui(ops);
+			break;
+		}
+		ops_unlock_ui(ops);
 
 		get_full_path_of(entry, sizeof(full_path), full_path);
 
@@ -640,7 +655,9 @@ fops_enqueue_marked_files(ops_t *ops, FileView *view, const char dst_hint[],
 		++nmarked_files;
 	}
 
+	ops_lock_ui(ops);
 	ui_cancellation_disable();
+	ops_unlock_ui(ops);
 
 	return nmarked_files;
 }
